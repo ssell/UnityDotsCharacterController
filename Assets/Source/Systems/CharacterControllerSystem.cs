@@ -314,18 +314,19 @@ namespace VertexFragment
             /// <returns></returns>
             private unsafe static void DetermineIfGrounded(Entity entity, ref float3 currPos, ref float3 epsilon, ref CharacterControllerComponent controller, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
             {
-                float3 gravity = math.normalize(controller.Gravity);
-                float3 offset = (gravity * 0.1f);
-
                 var aabb = collider.ColliderPtr->CalculateAabb();
                 float mod = 0.15f;
 
-                float3 posLeft = currPos - new float3(aabb.Extents.x * mod, 0.0f, 0.0f);
-                float3 posRight = currPos + new float3(aabb.Extents.x * mod, 0.0f, 0.0f);
-                float3 posForward = currPos + new float3(0.0f, 0.0f, aabb.Extents.z * mod);
-                float3 posBackward = currPos - new float3(0.0f, 0.0f, aabb.Extents.z * mod);
+                float3 samplePos = currPos + new float3(0.0f, aabb.Min.y, 0.0f);
+                float3 gravity = math.normalize(controller.Gravity);
+                float3 offset = (gravity * 0.1f);
 
-                controller.IsGrounded = PhysicsUtils.Raycast(out RaycastHit centerHit, currPos, currPos + offset, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, Allocator.Temp) ||
+                float3 posLeft = samplePos - new float3(aabb.Extents.x * mod, 0.0f, 0.0f);
+                float3 posRight = samplePos + new float3(aabb.Extents.x * mod, 0.0f, 0.0f);
+                float3 posForward = samplePos + new float3(0.0f, 0.0f, aabb.Extents.z * mod);
+                float3 posBackward = samplePos - new float3(0.0f, 0.0f, aabb.Extents.z * mod);
+
+                controller.IsGrounded = PhysicsUtils.Raycast(out RaycastHit centerHit, samplePos, samplePos + offset, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, Allocator.Temp) ||
                                         PhysicsUtils.Raycast(out RaycastHit leftHit, posLeft, posLeft + offset, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, Allocator.Temp) ||
                                         PhysicsUtils.Raycast(out RaycastHit rightHit, posRight, posRight + offset, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, Allocator.Temp) ||
                                         PhysicsUtils.Raycast(out RaycastHit forwardHit, posForward, posForward + offset, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, Allocator.Temp) ||
