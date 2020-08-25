@@ -69,7 +69,7 @@ namespace VertexFragment
     }
 
     /// <summary>
-    /// Used to add <see cref="CameraFollowView"/> via the Editor.
+    /// Used to add <see cref="CameraFollowComponent"/> via the Editor.
     /// </summary>
     [Serializable]
     public sealed class CameraFollowComponentView : MonoBehaviour, IConvertGameObjectToEntity
