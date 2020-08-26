@@ -41,7 +41,7 @@ namespace VertexFragment
             });
         }
 
-        protected override unsafe JobHandle OnUpdate(JobHandle inputDeps)
+        protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
             if (characterControllerGroup.CalculateChunkCount() == 0)
             {
@@ -59,12 +59,12 @@ namespace VertexFragment
             {
                 DeltaTime = Time.DeltaTime,
                 PhysicsWorld = buildPhysicsWorld.PhysicsWorld,
-                EntityType = entityTypeHandle,
+                EntityHandles = entityTypeHandle,
                 ColliderData = colliderData,
 
-                CharacterControllerType = characterControllerTypeHandle,
-                TranslationType = translationTypeHandle,
-                RotationType = rotationTypeHandle
+                CharacterControllerHandles = characterControllerTypeHandle,
+                TranslationHandles = translationTypeHandle,
+                RotationHandles = rotationTypeHandle
             };
 
             var dependency = JobHandle.CombineDependencies(inputDeps, exportPhysicsWorld.GetOutputDependency());
@@ -75,27 +75,29 @@ namespace VertexFragment
             return controllerJobHandle;
         }
 
+        /// <summary>
+        /// The job the performs all of the logic of the character controller.
+        /// </summary>
         private struct CharacterControllerJob : IJobChunk
         {
             public float DeltaTime;
 
             [ReadOnly] public PhysicsWorld PhysicsWorld;
-            [ReadOnly] public EntityTypeHandle EntityType;
+            [ReadOnly] public EntityTypeHandle EntityHandles;
             [ReadOnly] public ComponentDataFromEntity<PhysicsCollider> ColliderData;
 
-            public ComponentTypeHandle<CharacterControllerComponent> CharacterControllerType;
-            public ComponentTypeHandle<Translation> TranslationType;
-            public ComponentTypeHandle<Rotation> RotationType;
+            public ComponentTypeHandle<CharacterControllerComponent> CharacterControllerHandles;
+            public ComponentTypeHandle<Translation> TranslationHandles;
+            public ComponentTypeHandle<Rotation> RotationHandles;
 
-
-            public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
             {
                 var collisionWorld = PhysicsWorld.CollisionWorld;
 
-                var chunkEntityData = chunk.GetNativeArray(EntityType);
-                var chunkCharacterControllerData = chunk.GetNativeArray(CharacterControllerType);
-                var chunkTranslationData = chunk.GetNativeArray(TranslationType);
-                var chunkRotationData = chunk.GetNativeArray(RotationType);
+                var chunkEntityData = chunk.GetNativeArray(EntityHandles);
+                var chunkCharacterControllerData = chunk.GetNativeArray(CharacterControllerHandles);
+                var chunkTranslationData = chunk.GetNativeArray(TranslationHandles);
+                var chunkRotationData = chunk.GetNativeArray(RotationHandles);
 
                 for (int i = 0; i < chunk.Count; ++i)
                 {
@@ -112,6 +114,15 @@ namespace VertexFragment
                 }
             }
 
+            /// <summary>
+            /// Processes a specific entity in the chunk.
+            /// </summary>
+            /// <param name="entity"></param>
+            /// <param name="controller"></param>
+            /// <param name="position"></param>
+            /// <param name="rotation"></param>
+            /// <param name="collider"></param>
+            /// <param name="collisionWorld"></param>
             private void HandleChunk(ref Entity entity, ref CharacterControllerComponent controller, ref Translation position, ref Rotation rotation, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
             {
                 float3 epsilon = new float3(0.0f, Epsilon, 0.0f) * -math.normalize(controller.Gravity);
@@ -121,7 +132,7 @@ namespace VertexFragment
                 float3 verticalVelocity = new float3();
                 float3 gravityVelocity = controller.Gravity * DeltaTime * (controller.IsGrounded ? 0.0f : 1.0f);
                 float3 jumpVelocity = controller.JumpVelocity;
-                float3 horizontalVelocity = controller.HorizontalVelocity + (controller.CurrentDirection * controller.CurrentMagnitude * controller.Speed * DeltaTime);
+                float3 horizontalVelocity = (controller.CurrentDirection * controller.CurrentMagnitude * controller.Speed * DeltaTime);
 
                 if (controller.IsGrounded && controller.Jump && MathUtils.IsZero(math.lengthsq(controller.JumpVelocity)))
                 {
@@ -129,8 +140,6 @@ namespace VertexFragment
                 }
 
                 HandleHorizontalMovement(ref horizontalVelocity, ref entity, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
-                //ApplyFriction(ref horizontalVelocity, ref controller);
-
                 currPos += horizontalVelocity;
 
                 HandleVerticalMovement(ref verticalVelocity, ref jumpVelocity, ref gravityVelocity, ref entity, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
@@ -138,15 +147,14 @@ namespace VertexFragment
 
                 currPos += verticalVelocity;
 
-                CorrectForCollision(ref entity, position.Value, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
+                CorrectForCollision(ref entity, ref currPos, ref currRot, ref collider, ref collisionWorld);
                 DetermineIfGrounded(entity, ref currPos, ref epsilon, ref controller, ref collider, ref collisionWorld);
 
                 position.Value = currPos - epsilon;
-                controller.HorizontalVelocity = new float3();
             }
 
             /// <summary>
-            /// 
+            /// Performs a collision correction at the specified position.
             /// </summary>
             /// <param name="entity"></param>
             /// <param name="currPos"></param>
@@ -154,7 +162,7 @@ namespace VertexFragment
             /// <param name="controller"></param>
             /// <param name="collider"></param>
             /// <param name="collisionWorld"></param>
-            private void CorrectForCollision(ref Entity entity, float3 prevPos, ref float3 currPos, ref quaternion currRot, ref CharacterControllerComponent controller, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
+            private void CorrectForCollision(ref Entity entity, ref float3 currPos, ref quaternion currRot, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
             {
                 RigidTransform transform = new RigidTransform()
                 {
@@ -172,7 +180,7 @@ namespace VertexFragment
             }
 
             /// <summary>
-            /// 
+            /// Handles horizontal movement on the XZ plane.
             /// </summary>
             /// <param name="horizontalVelocity"></param>
             /// <param name="entity"></param>
@@ -181,8 +189,14 @@ namespace VertexFragment
             /// <param name="controller"></param>
             /// <param name="collider"></param>
             /// <param name="collisionWorld"></param>
-            /// <param name="entityManager"></param>
-            private void HandleHorizontalMovement(ref float3 horizontalVelocity, ref Entity entity, ref float3 currPos, ref quaternion currRot, ref CharacterControllerComponent controller, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
+            private void HandleHorizontalMovement(
+                ref float3 horizontalVelocity, 
+                ref Entity entity, 
+                ref float3 currPos, 
+                ref quaternion currRot,
+                ref CharacterControllerComponent controller, 
+                ref PhysicsCollider collider, 
+                ref CollisionWorld collisionWorld)
             {
                 if (MathUtils.IsZero(horizontalVelocity))
                 {
@@ -190,7 +204,6 @@ namespace VertexFragment
                 }
 
                 float3 targetPos = currPos + horizontalVelocity;
-                float3 step = new float3(0.0f, controller.MaxStep, 0.0f);
 
                 var horizontalCollisions = PhysicsUtils.ColliderCastAll(collider, currPos, targetPos, ref collisionWorld, entity, Allocator.Temp);
                 PhysicsUtils.TrimByFilter(ref horizontalCollisions, ColliderData, PhysicsCollisionFilters.DynamicWithPhysical);
@@ -198,15 +211,18 @@ namespace VertexFragment
                 if (horizontalCollisions.Count != 0)
                 {
                     // We either have to step or slide as something is in our way.
+                    float3 step = new float3(0.0f, controller.MaxStep, 0.0f);
                     PhysicsUtils.ColliderCast(out ColliderCastHit nearestStepHit, collider, targetPos + step, targetPos, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, null, ColliderData, Allocator.Temp);
 
                     if (!MathUtils.IsZero(nearestStepHit.Fraction))
                     {
+                        // We can step up.
                         targetPos += (step * (1.0f - nearestStepHit.Fraction));
                         horizontalVelocity = targetPos - currPos;
                     }
                     else
                     {
+                        // We can not step up, so slide.
                         var horizontalDistances = PhysicsUtils.ColliderDistanceAll(collider, 1.0f, new RigidTransform() { pos = currPos + horizontalVelocity, rot = currRot }, ref collisionWorld, entity, Allocator.Temp);
                         PhysicsUtils.TrimByFilter(ref horizontalDistances, ColliderData, PhysicsCollisionFilters.DynamicWithPhysical);
 
@@ -224,7 +240,7 @@ namespace VertexFragment
             }
 
             /// <summary>
-            /// 
+            /// Handles vertical movement from gravity and jumping.
             /// </summary>
             /// <param name="jumpVelocity"></param>
             /// <param name="entity"></param>
@@ -233,7 +249,6 @@ namespace VertexFragment
             /// <param name="controller"></param>
             /// <param name="collider"></param>
             /// <param name="collisionWorld"></param>
-            /// <param name="entityManager"></param>
             private void HandleVerticalMovement(
                 ref float3 totalVelocity,
                 ref float3 jumpVelocity,
@@ -278,11 +293,10 @@ namespace VertexFragment
             }
 
             /// <summary>
-            /// 
+            /// Applies drag to the jump velocity which reduces it over time.
             /// </summary>
             /// <param name="jumpVelocity"></param>
             /// <param name="controller"></param>
-            /// <param name="deltaTime"></param>
             private void ApplyDrag(ref float3 jumpVelocity, ref CharacterControllerComponent controller)
             {
                 float currSpeed = math.length(jumpVelocity);
@@ -304,7 +318,7 @@ namespace VertexFragment
             }
 
             /// <summary>
-            /// 
+            /// Determines if the character is resting on a surface.
             /// </summary>
             /// <param name="entity"></param>
             /// <param name="currPos"></param>

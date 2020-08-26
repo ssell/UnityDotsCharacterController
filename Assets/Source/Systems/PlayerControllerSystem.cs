@@ -22,7 +22,7 @@ namespace VertexFragment
         /// <summary>
         /// Processes the horizontal movement input from the player to move the entity along the xz plane.
         /// </summary>
-        /// <param name="entity"></param>
+        /// <param name="controller"></param>
         /// <param name="camera"></param>
         private void ProcessMovement(ref CharacterControllerComponent controller, ref CameraFollowComponent camera)
         {
