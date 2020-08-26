@@ -7,7 +7,7 @@ namespace VertexFragment
     /// <summary>
     /// Basic system which follows the entity with the <see cref="CameraFollowComponent"/>.
     /// </summary>
-    public class CameraFollowSystem : ComponentSystem
+    public sealed class CameraFollowSystem : ComponentSystem
     {
         protected override void OnUpdate()
         {
