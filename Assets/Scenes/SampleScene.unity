@@ -7409,7 +7409,7 @@ Transform:
   m_GameObject: {fileID: 1858444632}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 100, y: 1, z: 100}
+  m_LocalScale: {x: 1000, y: 1, z: 1000}
   m_Children: []
   m_Father: {fileID: 2017859919}
   m_RootOrder: 0
@@ -7941,7 +7941,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Gravity:
     x: 0
-    y: -9.86
+    y: -9.81
     z: 0
   MaxSpeed: 7.5
   Speed: 5
@@ -7963,7 +7963,7 @@ MonoBehaviour:
   Yaw: 0
   Pitch: 53
   Zoom: 8
-  MinPitch: 53
+  MinPitch: 0
   MaxPitch: 70
   MinZoom: 5
   MaxZoom: 10
