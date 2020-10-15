@@ -7717,7 +7717,7 @@ MonoBehaviour:
     Value:
       x: -90
       y: 0
-      z: 90
+      z: -90
     RotationOrder: 4
   m_Capsule:
     Height: 2
@@ -7941,11 +7941,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Gravity:
     x: 0
-    y: -9.81
+    y: -22
     z: 0
   MaxSpeed: 7.5
   Speed: 5
-  JumpStrength: 0.15
+  JumpStrength: 9
   MaxStep: 0.35
   Drag: 0.2
 --- !u!114 &1925045244

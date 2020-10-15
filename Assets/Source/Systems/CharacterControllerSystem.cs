@@ -58,6 +58,7 @@ namespace VertexFragment
             var controllerJob = new CharacterControllerJob()
             {
                 DeltaTime = Time.DeltaTime,
+
                 PhysicsWorld = buildPhysicsWorld.PhysicsWorld,
                 EntityHandles = entityTypeHandle,
                 ColliderData = colliderData,
@@ -129,25 +130,35 @@ namespace VertexFragment
                 float3 currPos = position.Value + epsilon;
                 quaternion currRot = rotation.Value;
 
-                float3 verticalVelocity = new float3();
-                float3 gravityVelocity = controller.Gravity * DeltaTime * (controller.IsGrounded ? 0.0f : 1.0f);
-                float3 jumpVelocity = controller.JumpVelocity;
+                float3 gravityVelocity = controller.Gravity * DeltaTime;
+                float3 verticalVelocity = (controller.VerticalVelocity + gravityVelocity);
                 float3 horizontalVelocity = (controller.CurrentDirection * controller.CurrentMagnitude * controller.Speed * DeltaTime);
 
-                if (controller.IsGrounded && controller.Jump && MathUtils.IsZero(math.lengthsq(controller.JumpVelocity)))
+                if (controller.IsGrounded)
                 {
-                    jumpVelocity += controller.JumpStrength * -math.normalize(controller.Gravity);
+                    if (controller.Jump)
+                    {
+                        verticalVelocity = controller.JumpStrength * -math.normalize(controller.Gravity);
+                    }
+                    else
+                    {
+                        float3 gravityDir = math.normalize(gravityVelocity);
+                        float3 verticalDir = math.normalize(verticalVelocity);
+
+                        if (MathUtils.FloatEquals(math.dot(gravityDir, verticalDir), 1.0f))
+                        {
+                            verticalVelocity = new float3();
+                        }
+                    }
                 }
 
                 HandleHorizontalMovement(ref horizontalVelocity, ref entity, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
                 currPos += horizontalVelocity;
 
-                HandleVerticalMovement(ref verticalVelocity, ref jumpVelocity, ref gravityVelocity, ref entity, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
-                ApplyDrag(ref jumpVelocity, ref controller);
-
+                HandleVerticalMovement(ref verticalVelocity, ref entity, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
                 currPos += verticalVelocity;
 
-                CorrectForCollision(ref entity, ref currPos, ref currRot, ref collider, ref collisionWorld);
+                CorrectForCollision(ref entity, ref currPos, ref currRot, ref controller, ref collider, ref collisionWorld);
                 DetermineIfGrounded(entity, ref currPos, ref epsilon, ref controller, ref collider, ref collisionWorld);
 
                 position.Value = currPos - epsilon;
@@ -162,7 +173,7 @@ namespace VertexFragment
             /// <param name="controller"></param>
             /// <param name="collider"></param>
             /// <param name="collisionWorld"></param>
-            private void CorrectForCollision(ref Entity entity, ref float3 currPos, ref quaternion currRot, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
+            private void CorrectForCollision(ref Entity entity, ref float3 currPos, ref quaternion currRot, ref CharacterControllerComponent controller, ref PhysicsCollider collider, ref CollisionWorld collisionWorld)
             {
                 RigidTransform transform = new RigidTransform()
                 {
@@ -170,9 +181,22 @@ namespace VertexFragment
                     rot = currRot
                 };
 
-                if (PhysicsUtils.ColliderDistance(out DistanceHit smallestHit, collider, 0.1f, transform, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, null, ColliderData, Allocator.Temp))
+                // Use a subset sphere within our collider to test against.
+                // We do not use the collider itself as some intersection (such as on ramps) is ok.
+
+                var offset = -math.normalize(controller.Gravity) * 0.1f;
+                var sampleCollider = new PhysicsCollider()
                 {
-                    if (smallestHit.Distance < -0.075f)
+                    Value = SphereCollider.Create(new SphereGeometry()
+                    {
+                        Center = currPos + offset,
+                        Radius = 0.1f
+                    })
+                };
+
+                if (PhysicsUtils.ColliderDistance(out DistanceHit smallestHit, sampleCollider, 0.1f, transform, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, null, ColliderData, Allocator.Temp))
+                {
+                    if (smallestHit.Distance < 0.0f)
                     {
                         currPos += math.abs(smallestHit.Distance) * smallestHit.SurfaceNormal;
                     }
@@ -190,12 +214,12 @@ namespace VertexFragment
             /// <param name="collider"></param>
             /// <param name="collisionWorld"></param>
             private void HandleHorizontalMovement(
-                ref float3 horizontalVelocity, 
-                ref Entity entity, 
-                ref float3 currPos, 
+                ref float3 horizontalVelocity,
+                ref Entity entity,
+                ref float3 currPos,
                 ref quaternion currRot,
-                ref CharacterControllerComponent controller, 
-                ref PhysicsCollider collider, 
+                ref CharacterControllerComponent controller,
+                ref PhysicsCollider collider,
                 ref CollisionWorld collisionWorld)
             {
                 if (MathUtils.IsZero(horizontalVelocity))
@@ -242,7 +266,6 @@ namespace VertexFragment
             /// <summary>
             /// Handles vertical movement from gravity and jumping.
             /// </summary>
-            /// <param name="jumpVelocity"></param>
             /// <param name="entity"></param>
             /// <param name="currPos"></param>
             /// <param name="currRot"></param>
@@ -250,9 +273,7 @@ namespace VertexFragment
             /// <param name="collider"></param>
             /// <param name="collisionWorld"></param>
             private void HandleVerticalMovement(
-                ref float3 totalVelocity,
-                ref float3 jumpVelocity,
-                ref float3 gravityVelocity,
+                ref float3 verticalVelocity,
                 ref Entity entity,
                 ref float3 currPos,
                 ref quaternion currRot,
@@ -260,61 +281,41 @@ namespace VertexFragment
                 ref PhysicsCollider collider,
                 ref CollisionWorld collisionWorld)
             {
-                totalVelocity = jumpVelocity + gravityVelocity;
+                controller.VerticalVelocity = verticalVelocity;
 
-                var verticalCollisions = PhysicsUtils.ColliderCastAll(collider, currPos, currPos + totalVelocity, ref collisionWorld, entity, Allocator.Temp);
+                if (MathUtils.IsZero(verticalVelocity))
+                {
+                    return;
+                }
+
+                verticalVelocity *= DeltaTime;
+
+                var verticalCollisions = PhysicsUtils.ColliderCastAll(collider, currPos, currPos + verticalVelocity, ref collisionWorld, entity, Allocator.Temp);
                 PhysicsUtils.TrimByFilter(ref verticalCollisions, ColliderData, PhysicsCollisionFilters.DynamicWithPhysical);
 
                 if (verticalCollisions.Count != 0)
                 {
                     RigidTransform transform = new RigidTransform()
                     {
-                        pos = currPos + totalVelocity,
+                        pos = currPos + verticalVelocity,
                         rot = currRot
                     };
 
                     if (PhysicsUtils.ColliderDistance(out DistanceHit verticalPenetration, collider, 1.0f, transform, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, null, ColliderData, Allocator.Temp))
                     {
-                        if (verticalPenetration.Distance < 0.0f)
+                        if (verticalPenetration.Distance < -0.01f)
                         {
-                            totalVelocity += (verticalPenetration.SurfaceNormal * -verticalPenetration.Distance);
+                            verticalVelocity += (verticalPenetration.SurfaceNormal * verticalPenetration.Distance);
 
-                            if (PhysicsUtils.ColliderCast(out ColliderCastHit adjustedHit, collider, currPos, currPos + totalVelocity, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, null, ColliderData, Allocator.Temp))
+                            if (PhysicsUtils.ColliderCast(out ColliderCastHit adjustedHit, collider, currPos, currPos + verticalVelocity, ref collisionWorld, entity, PhysicsCollisionFilters.DynamicWithPhysical, null, ColliderData, Allocator.Temp))
                             {
-                                totalVelocity *= adjustedHit.Fraction;
+                                verticalVelocity *= adjustedHit.Fraction;
                             }
-
-                            controller.JumpVelocity = new float3();
                         }
                     }
                 }
 
-                totalVelocity = MathUtils.ZeroOut(totalVelocity, 0.01f);
-            }
-
-            /// <summary>
-            /// Applies drag to the jump velocity which reduces it over time.
-            /// </summary>
-            /// <param name="jumpVelocity"></param>
-            /// <param name="controller"></param>
-            private void ApplyDrag(ref float3 jumpVelocity, ref CharacterControllerComponent controller)
-            {
-                float currSpeed = math.length(jumpVelocity);
-                float dragDelta = controller.Drag * DeltaTime;
-
-                currSpeed = math.max((currSpeed - dragDelta), 0.0f);
-
-                if (MathUtils.IsZero(currSpeed))
-                {
-                    jumpVelocity = new float3();
-                }
-                else
-                {
-                    jumpVelocity = math.normalize(jumpVelocity) * currSpeed;
-                    jumpVelocity = MathUtils.ZeroOut(jumpVelocity, 0.001f);
-                }
-
-                controller.JumpVelocity = jumpVelocity;
+                verticalVelocity = MathUtils.ZeroOut(verticalVelocity, 0.0001f);
             }
 
             /// <summary>
