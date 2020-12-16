@@ -23,7 +23,7 @@ namespace VertexFragment
         /// The current magnitude of the character movement.
         /// If <c>0.0</c>, then the character is not being directly moved by the controller but residual forces may still be active.
         /// </summary>
-        public float3 CurrentMagnitude { get; set; }
+        public float CurrentMagnitude { get; set; }
 
         /// <summary>
         /// Is the character requesting to jump?
@@ -61,7 +61,7 @@ namespace VertexFragment
         public float MaxStep { get; set; }
 
         /// <summary>
-        /// Drag value applied to reduce the <see cref="JumpVelocity"/>.
+        /// Drag value applied to reduce the <see cref="VerticalVelocity"/>.
         /// </summary>
         public float Drag { get; set; }
 

@@ -58,6 +58,7 @@ namespace VertexFragment
             var controllerJob = new CharacterControllerJob()
             {
                 DeltaTime = Time.DeltaTime,
+
                 PhysicsWorld = buildPhysicsWorld.PhysicsWorld,
                 EntityHandles = entityTypeHandle,
                 ColliderData = colliderData,
