@@ -12,9 +12,14 @@ It should be noted that this project is for demonstration purposes only, and the
 
 The code was written against:
 
-* Unity v2020.1.3f1
-* [Entities v0.14.0-preview.18](https://docs.unity3d.com/Packages/com.unity.entities@0.14/manual/index.html)
-* [Physics v0.4.1-preview](https://docs.unity3d.com/Packages/com.unity.physics@0.4/manual/index.html)
+* Unity v2020.2.0f1
+* [Entities v0.16.0-preview.21](https://docs.unity3d.com/Packages/com.unity.entities@0.16/manual/index.html)
+* [Physics v0.5.1-preview.2](https://docs.unity3d.com/Packages/com.unity.physics@0.5/manual/index.html)
+* [Burst v1.4.3](https://docs.unity3d.com/Packages/com.unity.burst@1.4/manual/index.html)
+
+## Web Demo
+
+Unfortunately at this time Burst and WebGL do not get along. ([source](https://forum.unity.com/threads/burst-for-standalone-players.539820/page-5#post-5364648))
 
 ## Controls
 
