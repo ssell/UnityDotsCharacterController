@@ -14,14 +14,16 @@ namespace VertexFragment
         /// <summary>
         /// Returns a list of all colliders within the specified distance of the provided collider, as a list of <see cref="DistanceHit"/>.<para/>
         /// 
-        /// Can be used in conjunction with <see cref="ColliderCastAll"/> to get the penetration depths of any colliders (using the distance of collisions).
+        /// Can be used in conjunction with <see cref="ColliderCastAll"/> to get the penetration depths of any colliders (using the distance of collisions).<para/>
+        /// 
+        /// The caller must dispose of the returned list.
         /// </summary>
         /// <param name="collider"></param>
         /// <param name="maxDistance"></param>
         /// <param name="transform"></param>
         /// <param name="collisionWorld"></param>
         /// <returns></returns>
-        public unsafe static List<DistanceHit> ColliderDistanceAll(PhysicsCollider collider, float maxDistance, RigidTransform transform, ref CollisionWorld collisionWorld, Entity ignore, Allocator allocator = Allocator.TempJob)
+        public unsafe static NativeList<DistanceHit> ColliderDistanceAll(PhysicsCollider collider, float maxDistance, RigidTransform transform, ref CollisionWorld collisionWorld, Entity ignore, Allocator allocator = Allocator.TempJob)
         {
             ColliderDistanceInput input = new ColliderDistanceInput()
             {
@@ -30,25 +32,14 @@ namespace VertexFragment
                 Transform = transform
             };
 
-            List<DistanceHit> output = new List<DistanceHit>();
             NativeList<DistanceHit> allDistances = new NativeList<DistanceHit>(allocator);
 
             if (collisionWorld.CalculateDistance(input, ref allDistances))
             {
-                foreach (var hit in allDistances)
-                {
-                    if (hit.Entity == ignore)
-                    {
-                        continue;
-                    }
-
-                    output.Add(hit);
-                }
+                TrimByEntity(ref allDistances, ignore);
             }
 
-            allDistances.Dispose();
-
-            return output;
+            return allDistances;
         }
 
         /// <summary>
@@ -73,7 +64,6 @@ namespace VertexFragment
             ComponentDataFromEntity<PhysicsCollider>? colliderData = null,
             Allocator allocator = Allocator.TempJob)
         {
-            smallestDistanceHit = new DistanceHit();
             var allDistances = ColliderDistanceAll(collider, maxDistance, transform, ref collisionWorld, ignore, allocator);
 
             if (filter.HasValue)
@@ -88,27 +78,16 @@ namespace VertexFragment
                 }
             }
 
-            if (allDistances.Count == 0)
-            {
-                return false;
-            }
-
-            float smallest = float.MaxValue;
-
-            foreach (var distanceHit in allDistances)
-            {
-                if (distanceHit.Distance < smallest)
-                {
-                    smallest = distanceHit.Distance;
-                    smallestDistanceHit = distanceHit;
-                }
-            }
+            GetSmallestFractional(ref allDistances, out smallestDistanceHit);
+            allDistances.Dispose();
 
             return true;
         }
 
         /// <summary>
-        /// Performs a collider cast along the specified ray and returns all resulting <see cref="ColliderCastHit"/>s.
+        /// Performs a collider cast along the specified ray and returns all resulting <see cref="ColliderCastHit"/>s.<para/>
+        /// 
+        /// The caller must dispose of the returned list.
         /// </summary>
         /// <param name="collider"></param>
         /// <param name="from"></param>
@@ -116,7 +95,7 @@ namespace VertexFragment
         /// <param name="collisionWorld"></param>
         /// <param name="ignore">Will ignore this entity if it was hit. Useful to prevent returning hits from the caster.</param>
         /// <returns></returns>
-        public unsafe static List<ColliderCastHit> ColliderCastAll(PhysicsCollider collider, float3 from, float3 to, ref CollisionWorld collisionWorld, Entity ignore, Allocator allocator = Allocator.TempJob)
+        public unsafe static NativeList<ColliderCastHit> ColliderCastAll(PhysicsCollider collider, float3 from, float3 to, ref CollisionWorld collisionWorld, Entity ignore, Allocator allocator = Allocator.TempJob)
         {
             ColliderCastInput input = new ColliderCastInput()
             {
@@ -127,23 +106,12 @@ namespace VertexFragment
 
             NativeList<ColliderCastHit> allHits = new NativeList<ColliderCastHit>(allocator);
 
-            collisionWorld.CastCollider(input, ref allHits);
-
-            List<ColliderCastHit> output = new List<ColliderCastHit>(allHits.Length);
-
-            foreach (var hit in allHits)
+            if (collisionWorld.CastCollider(input, ref allHits))
             {
-                if (hit.Entity == ignore)
-                {
-                    continue;
-                }
-
-                output.Add(hit);
+                TrimByEntity(ref allHits, ignore);
             }
 
-            allHits.Dispose();
-
-            return output;
+            return allHits;
         }
 
         /// <summary>
@@ -174,7 +142,7 @@ namespace VertexFragment
             Allocator allocator = Allocator.TempJob)
         {
             nearestHit = new ColliderCastHit();
-            List<ColliderCastHit> allHits = ColliderCastAll(collider, from, to, ref collisionWorld, ignore, allocator);
+            NativeList<ColliderCastHit> allHits = ColliderCastAll(collider, from, to, ref collisionWorld, ignore, allocator);
 
             if (filter.HasValue)
             {
@@ -188,27 +156,15 @@ namespace VertexFragment
                 }
             }
 
-            if (allHits.Count == 0)
-            {
-                return false;
-            }
-
-            float nearestFrac = float.MaxValue;
-
-            foreach (var hit in allHits)
-            {
-                if (hit.Fraction < nearestFrac)
-                {
-                    nearestFrac = hit.Fraction;
-                    nearestHit = hit;
-                }
-            }
+            GetSmallestFractional(ref allHits, out nearestHit);
+            allHits.Dispose();
 
             return true;
         }
 
         /// <summary>
-        /// Performs a raycast along the specified ray and returns all resulting <see cref="RaycastHit"/>s.
+        /// Performs a raycast along the specified ray and returns all resulting <see cref="RaycastHit"/>s.<para/>
+        /// The caller must dispose of the returned list.
         /// </summary>
         /// <param name="collisionWorld"></param>
         /// <param name="from"></param>
@@ -216,34 +172,23 @@ namespace VertexFragment
         /// <param name="ignore">Will ignore this entity if it was hit. Useful to prevent returning hits from the caster.</param>
         /// <param name="filter"></param>
         /// <returns></returns>
-        public unsafe static List<RaycastHit> RaycastAll(float3 from, float3 to, ref CollisionWorld collisionWorld, Entity ignore, CollisionFilter? filter = null, Allocator allocator = Allocator.TempJob)
+        public unsafe static NativeList<RaycastHit> RaycastAll(float3 from, float3 to, ref CollisionWorld collisionWorld, Entity ignore, CollisionFilter? filter = null, Allocator allocator = Allocator.TempJob)
         {
             RaycastInput input = new RaycastInput()
             {
                 Start = from,
                 End = to,
-                Filter = (filter.HasValue ? filter.Value : CollisionFilter.Default)
+                Filter = (filter.HasValue ? filter.Value : PhysicsCollisionFilters.AllWithAll)
             };
 
             NativeList<RaycastHit> allHits = new NativeList<RaycastHit>(allocator);
 
-            collisionWorld.CastRay(input, ref allHits);
-
-            List<RaycastHit> output = new List<RaycastHit>(allHits.Length);
-
-            foreach (var hit in allHits)
+            if (collisionWorld.CastRay(input, ref allHits))
             {
-                if (hit.Entity == ignore)
-                {
-                    continue;
-                }
-
-                output.Add(hit);
+                TrimByEntity(ref allHits, ignore);
             }
 
-            allHits.Dispose();
-
-            return output;
+            return allHits;
         }
 
         /// <summary>
@@ -260,29 +205,12 @@ namespace VertexFragment
         /// <returns></returns>
         public unsafe static bool Raycast(out RaycastHit nearestHit, float3 from, float3 to, ref CollisionWorld collisionWorld, Entity ignore, CollisionFilter? filter = null, Allocator allocator = Allocator.TempJob)
         {
-            nearestHit = new RaycastHit();
-            List<RaycastHit> allHits = RaycastAll(from, to, ref collisionWorld, ignore, filter, allocator);
+            NativeList<RaycastHit> allHits = RaycastAll(from, to, ref collisionWorld, ignore, filter, allocator);
 
-            if (allHits.Count == 0)
-            {
-                return false;
-            }
+            bool gotHit = GetSmallestFractional(ref allHits, out nearestHit);
+            allHits.Dispose();
 
-            float nearestHitDist = float.MaxValue;
-
-            foreach (var hit in allHits)
-            {
-                float3 toHit = hit.Position - from;
-                float hitDist = new UnityEngine.Vector3(toHit.x, toHit.y, toHit.z).sqrMagnitude;
-
-                if (hitDist < nearestHitDist)
-                {
-                    nearestHitDist = hitDist;
-                    nearestHit = hit;
-                }
-            }
-
-            return true;
+            return gotHit;
         }
 
         /// <summary>
@@ -294,14 +222,13 @@ namespace VertexFragment
         ///     <item>Can not collide with the specified filter.</item>
         /// </list>
         /// </summary>
+        /// <typeparam name="T"></typeparam>
         /// <param name="castResults"></param>
         /// <param name="entityManager"></param>
         /// <param name="filter"></param>
-        public unsafe static void TrimByFilter<T>(ref List<T> castResults, EntityManager entityManager, CollisionFilter filter) where T : IQueryResult
+        public unsafe static void TrimByFilter<T>(ref NativeList<T> castResults, EntityManager entityManager, CollisionFilter filter) where T : struct, IQueryResult
         {
-            List<int> toRemove = new List<int>(castResults.Count);
-
-            for (int i = 0; i < castResults.Count; ++i)
+            for (int i = (castResults.Length - 1); i >= 0; --i)
             {
                 if (entityManager.HasComponent<PhysicsCollider>(castResults[i].Entity))
                 {
@@ -313,27 +240,20 @@ namespace VertexFragment
                     }
                 }
 
-                toRemove.Add(i);
-            }
-
-            for (int i = (toRemove.Count - 1); i >= 0; --i)
-            {
-                castResults.RemoveAt(toRemove[i]);
+                castResults.RemoveAt(i);
             }
         }
 
         /// <summary>
-        /// Variant of <see cref="TrimByFilter{T}(ref List{T}, EntityManager, CollisionFilter)"/> to be used within a Job which does not have access to an <see cref="EntityManager"/>.
+        /// Variant of <see cref="TrimByFilter{T}(ref NativeList{T}, EntityManager, CollisionFilter)"/> to be used within a Job which does not have access to an <see cref="EntityManager"/>.
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="castResults"></param>
-        /// <param name="colliderData">Retrieved via <see cref="ComponentSystemBase.GetComponentDataFromEntity{T}(bool)"/></param>
+        /// <param name="colliderData"></param>
         /// <param name="filter"></param>
-        public unsafe static void TrimByFilter<T>(ref List<T> castResults, ComponentDataFromEntity<PhysicsCollider> colliderData, CollisionFilter filter) where T : IQueryResult
+        public unsafe static void TrimByFilter<T>(ref NativeList<T> castResults, ComponentDataFromEntity<PhysicsCollider> colliderData, CollisionFilter filter) where T : struct, IQueryResult
         {
-            List<int> toRemove = new List<int>(castResults.Count);
-
-            for (int i = 0; i < castResults.Count; ++i)
+            for (int i = (castResults.Length - 1); i >= 0; --i)
             {
                 if (colliderData.HasComponent(castResults[i].Entity))
                 {
@@ -345,13 +265,58 @@ namespace VertexFragment
                     }
                 }
 
-                toRemove.Add(i);
+                castResults.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
+        /// The specified entity is removed from the provided list if it is present.
+        /// </summary>
+        /// <param name="castResults"></param>
+        /// <param name="ignore"></param>
+        public static void TrimByEntity<T>(ref NativeList<T> castResults, Entity ignore) where T : struct, IQueryResult
+        {
+            if (ignore == Entity.Null)
+            {
+                return;
             }
 
-            for (int i = (toRemove.Count - 1); i >= 0; --i)
+            for (int i = (castResults.Length - 1); i >= 0; --i)
             {
-                castResults.RemoveAt(toRemove[i]);
+                if (ignore == castResults[i].Entity)
+                {
+                    castResults.RemoveAt(i);
+                }
             }
+        }
+
+        /// <summary>
+        /// Retrieves the smallest <see cref="IQueryResult.Fraction"/> result in the provided list.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="castResults"></param>
+        /// <param name="nearest"></param>
+        public static bool GetSmallestFractional<T>(ref NativeList<T> castResults, out T nearest) where T : struct, IQueryResult
+        {
+            nearest = default(T);
+
+            if (castResults.Length == 0)
+            {
+                return false;
+            }
+
+            float smallest = float.MaxValue;
+
+            for (int i = 0; i < castResults.Length; ++i)
+            {
+                if (castResults[i].Fraction < smallest)
+                {
+                    smallest = castResults[i].Fraction;
+                    nearest = castResults[i];
+                }
+            }
+
+            return true;
         }
     }
 }

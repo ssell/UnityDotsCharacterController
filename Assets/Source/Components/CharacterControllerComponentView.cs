@@ -75,9 +75,14 @@ namespace VertexFragment
         public bool IsGrounded { get; set; }
 
         /// <summary>
+        /// The current horizontal velocity of the character.
+        /// </summary>
+        public float3 HorizontalVelocity { get; set; }
+
+        /// <summary>
         /// The current jump velocity of the character.
         /// </summary>
-        public float3 JumpVelocity { get; set; }
+        public float3 VerticalVelocity { get; set; }
     }
 
     /// <summary>
@@ -86,10 +91,10 @@ namespace VertexFragment
     [Serializable]
     public sealed class CharacterControllerComponentView : MonoBehaviour, IConvertGameObjectToEntity
     {
-        public float3 Gravity = new float3(0.0f, -9.81f, 0.0f);
+        public float3 Gravity = new float3(0.0f, -22.0f, 0.0f);
         public float MaxSpeed = 7.5f;
         public float Speed = 5.0f;
-        public float JumpStrength = 0.15f;
+        public float JumpStrength = 9.0f;
         public float MaxStep = 0.35f;
         public float Drag = 0.2f;
 
