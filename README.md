@@ -1,5 +1,7 @@
 # Unity DOTS Character Controller Example
 
+![](Media/controller.gif)
+
 This repository contains the source code for a basic kinematic character controller implemented using Unity DOTS (Data-Orientated Tech Stack) with the new Entities (ECS) and Physics packages.
 
 There is an accompanying article, 
