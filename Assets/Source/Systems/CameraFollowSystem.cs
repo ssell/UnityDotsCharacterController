@@ -1,4 +1,5 @@
 ﻿using Unity.Entities;
+using Unity.Physics.Systems;
 using Unity.Transforms;
 using UnityEngine;
 
@@ -7,6 +8,7 @@ namespace VertexFragment
     /// <summary>
     /// Basic system which follows the entity with the <see cref="CameraFollowComponent"/>.
     /// </summary>
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup)), UpdateAfter(typeof(ExportPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public sealed class CameraFollowSystem : ComponentSystem
     {
         protected override void OnUpdate()
